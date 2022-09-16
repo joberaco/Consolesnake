@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <time.h>
+#include <stdbool.h>
 #include <Windows.h>
 
 #define RENDERER_W 100
@@ -9,9 +10,28 @@
 #define RENDERER_SIZE RENDERER_W*RENDERER_H
 #define SLEEP_MS 10
 
+#define SNAKE_MAX_SIZE 20
+#define SNAKE_MIN_SIZE 5
+#define SNAKE_SPEED 1
+
+typedef struct {
+    int x, y;
+} Point;
+
+typedef struct {
+    char head_sym;
+    char body_sym;
+    int size;
+    Point pos;
+    Point* body;
+    bool dead;
+} Snake;
+
 void init(char** renderer);
 void clear(char* renderer);
 void present(char* renderer);
+
+//char getKey();
 
 void drawPoint(char* renderer, char symbol, int x, int y);
 void drawLine(char* renderer, char symbol, int x1, int y1, int x2, int y2);
@@ -20,54 +40,70 @@ void drawCircle(char* renderer, char symbol, int xc, int yc, int r);
 int inBounds(int x, int y);
 void swap(int* a, int* b);
 
+Snake newSnake(char symbol, int maxsize, Point startP);
+void renderSnake(char* renderer, Snake* snake);
+void moveSnake(Snake* snake, Point pos);
+void feed(Snake* snake);
+
 char* renderer;
 
 int main()
 {
+    Snake snake = newSnake('#', SNAKE_MAX_SIZE, (Point){50,5});
+    int xspeed = SNAKE_SPEED, yspeed = 0;
+    
     init(&renderer);
-    int period = 0, t = 0, r, x, y;
-
     srand(time(NULL));
 
     while(1)
     {
         clear(renderer);
 
-        /*drawLine(renderer, '*', 20, 5, 30, 5);
-        drawLine(renderer, '*', 20, 5, 23, 10);
-        drawLine(renderer, '*', 20, 5, 10, 5);
-        drawLine(renderer, '*', 20, 5, 10, 10);*/
-
-        r = 6, x = 20, y = 10;
-
-        drawLine(renderer, '*', x, y, x + r*cos(((2*3.14)/20)*t), y + r*sin(((2*3.14)/20)*t));
-        r = 7;
-        drawPoint(renderer, '#', x + r*cos(((2*3.14)/20)*t), y + r*sin(((2*3.14)/20)*t));
-        r = 8;
-        drawCircle(renderer, '*', x, y, r);
-
-        r = 5, x = 50, y = 9;
-
-        drawLine(renderer, '*', x, y, x + r*cos(((2*3.14)/30)*t), y - r*sin(((2*3.14)/30)*t));
-        drawCircle(renderer, '*', x, y, r);
-
-        r = 5, x = 70, y = 15;
-
-        drawLine(renderer, '*', x, y, x + r*cos(((2*3.14)/20)*t), y + r*sin(((2*3.14)/20)*t));
-        drawCircle(renderer, '*', x, y, r);
-
-        t++;
-
-        /*for(x = 0; x < RENDERER_W; x++, period++)
+        if(!snake.dead)
         {
-            //drawPoint(renderer, '-', x, RENDERER_H/2);
+            if(yspeed == 0 && (rand()%10 == 0)){
+                xspeed = 0;
+                yspeed = (rand()%2 == 0 ? -1 : 1) * SNAKE_SPEED;
+            }
+            else if(xspeed == 0 && (rand()%10 == 0)){
+                yspeed = 0;
+                xspeed = (rand()%2 == 0 ? -1 : 1) * SNAKE_SPEED;
+            }
 
-            //drawPoint(renderer, '.', x, -pow(((x-50)/3),2)+10 + RENDERER_H/2);
-            //drawPoint(renderer, '.', x, sin((x+period)/3.14)*3 + RENDERER_H/2);
-            //drawPoint(renderer, '.', x, -sin((x+period)/3.14)*3 + RENDERER_H/2);
-            //drawPoint(renderer, '.', x, -tan(((x+period)*5)/(3.14/2))*2 + RENDERER_H/2);
-            //drawPoint(renderer, '.', x, (1/sin((x+period)/(3.14)))*3 + RENDERER_H/2);
-        }*/
+            if(snake.pos.x >= RENDERER_W){
+                snake.pos.x--;
+                xspeed = 0;
+                yspeed = SNAKE_SPEED;
+            }
+            else if(snake.pos.y >= RENDERER_H){
+                snake.pos.y--;
+                xspeed = -SNAKE_SPEED;
+                yspeed = 0;
+            }
+            else if(snake.pos.x < 0){
+                snake.pos.x++;
+                xspeed = 0;
+                yspeed = -SNAKE_SPEED;
+            }
+            else if(snake.pos.y < 0){
+                snake.pos.y++;
+                xspeed = SNAKE_SPEED;
+                yspeed = 0;
+            }
+
+            if(rand() % 2 == 0){
+                feed(&snake);
+            }
+
+            moveSnake(&snake, (Point){snake.pos.x+xspeed, snake.pos.y+yspeed});
+        }
+        else
+        {
+            printf("**********************************DEAD**********************************");
+            system("pause");
+        }
+
+        renderSnake(renderer, &snake);
 
         present(renderer);
         
@@ -79,7 +115,7 @@ int main()
 }
 
 void init(char** renderer)
-{
+{ 
     *renderer = (char*)malloc(sizeof(char) * RENDERER_SIZE);
 }
 
@@ -203,4 +239,53 @@ void swap(int* a, int* b)
     int tmp = *a;
     *a = *b;
     *b = tmp;
+}
+
+Snake newSnake(char symbol, int maxsize, Point startP)
+{
+    Snake snake;
+    int i;
+
+    snake = (Snake){symbol, '~', SNAKE_MIN_SIZE, startP, (Point*)malloc(maxsize*sizeof(Point)), false};
+
+    for(i = 0; i < SNAKE_MIN_SIZE; i++){
+        snake.body[i].x = startP.x - i;
+        snake.body[i].y = startP.y;
+    }
+
+    return snake;
+}
+
+void renderSnake(char* renderer, Snake* snake)
+{
+
+    drawPoint(renderer, snake->head_sym, snake->pos.x, snake->pos.y);
+
+    int i;
+    for(i = 1; i < snake->size; i++)
+    {
+        if(snake->body[i].x == snake->pos.x && snake->body[i].y == snake->pos.y){
+            snake->dead = true;
+        }
+
+        drawPoint(renderer, snake->body_sym, snake->body[i].x, snake->body[i].y);
+    }
+}
+
+void moveSnake(Snake* snake, Point pos)
+{
+    int i;
+    for(i = snake->size-1; i > 0; i--){
+        snake->body[i] = snake->body[i-1];
+    }
+
+    snake->pos = snake->body[0] = pos;
+}
+
+void feed(Snake* snake)
+{
+    if(snake->size < SNAKE_MAX_SIZE-1)
+    {
+        snake->size++;
+    }
 }
