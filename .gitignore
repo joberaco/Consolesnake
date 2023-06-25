@@ -1,3 +1,4 @@
-launch.json
-tasks.json
+.vscode/
+train/
 main.exe
+training.data
